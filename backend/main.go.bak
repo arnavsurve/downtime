@@ -1,0 +1,90 @@
+package main
+
+import (
+	"log"
+	"net/http"
+	"sync"
+
+	"github.com/gorilla/websocket"
+)
+
+var clients = make(map[*websocket.Conn]bool)
+var broadcast = make(chan Message)
+var upgrader = websocket.Upgrader{}
+var latestState = ""
+var version = 0
+var mu sync.Mutex
+
+type Message struct {
+	Content  string `json:"content"`
+	Version  int    `json:"version"`
+	ClientID string `json:"clientID"`
+}
+
+func main() {
+	fs := http.FileServer(http.Dir("../frontend"))
+	http.Handle("/", fs)
+
+	http.HandleFunc("/ws", handleConnections)
+
+	go handleMessages()
+
+	log.Println("http server started on ws://localhost:8000/ws")
+	err := http.ListenAndServe(":8000", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+func handleConnections(w http.ResponseWriter, r *http.Request) {
+	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Fatal("Upgrade: ", err)
+	}
+	defer ws.Close()
+
+	clients[ws] = true
+
+	// Send the latest state and version to the new client
+	err = ws.WriteJSON(Message{Content: latestState, Version: version})
+	if err != nil {
+		log.Printf("WriteJSON: %v", err)
+		ws.Close()
+		delete(clients, ws)
+		return
+	}
+
+	for {
+		var msg Message
+		err := ws.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("ReadJSON: %v", err)
+			delete(clients, ws)
+			break
+		}
+
+		mu.Lock()
+		if msg.Version == version {
+			latestState = msg.Content
+			version++
+			broadcast <- Message{Content: latestState, Version: version, ClientID: msg.ClientID}
+		}
+		mu.Unlock()
+	}
+}
+
+func handleMessages() {
+	for {
+		msg := <-broadcast
+		for client := range clients {
+			err := client.WriteJSON(msg)
+			if err != nil {
+				log.Printf("error: %v", err)
+				client.Close()
+				delete(clients, client)
+			}
+		}
+	}
+}

@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@magidoc/plugin-svelte-marked": "^6.0.0"
+  }
+}
