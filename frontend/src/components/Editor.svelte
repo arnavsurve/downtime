@@ -9,6 +9,9 @@
 
 	let parent;
 	let markdown;
+	const self = room.getSelf();
+	console.log(self.id);
+	console.log(self.info.color);
 
 	onMount(() => {
 		const { yText, yProvider, undoManager, leave } = setupLiveBlocks();
