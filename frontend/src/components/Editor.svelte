@@ -1,32 +1,17 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';
-	import { javascript } from '@codemirror/lang-javascript';
-	import { marked } from 'marked';
-
-	import { createClient } from '@liveblocks/client';
-	import { LiveblocksYjsProvider } from '@liveblocks/yjs';
-	import * as Y from 'yjs';
-	import { yCollab } from 'y-codemirror.next';
+	import { onMount } from 'svelte';
 	import { EditorView, basicSetup } from 'codemirror';
 	import { EditorState } from '@codemirror/state';
+	import { javascript } from '@codemirror/lang-javascript';
+	import { marked } from 'marked';
+	import { setupLiveBlocks } from '$lib/liveblocks.js';
+	import { yCollab } from 'y-codemirror.next';
 
 	let parent;
 	let markdown;
 
-	// Set up Liveblocks client
-	const client = createClient({
-		publicApiKey: 'pk_dev_bn8NpGvcK-JOGCA2v8PC-VYEcysRWkmw0XixX241MJwv-oIGOuo3bxw7OnEEP5dZ'
-	});
-
 	onMount(() => {
-		// Enter a multiplayer room
-		const { room, leave } = client.enterRoom('my-room');
-
-		// Set up Yjs document, shared text, undo manager, and Liveblocks Yjs provider
-		const yDoc = new Y.Doc();
-		const yText = yDoc.getText('codemirror');
-		const undoManager = new Y.UndoManager(yText);
-		const yProvider = new LiveblocksYjsProvider(room, yDoc);
+		const { yText, yProvider, undoManager, leave } = setupLiveBlocks();
 
 		// Set up CodeMirror and extensions
 		const state = EditorState.create({
@@ -55,29 +40,10 @@
 			leave();
 		};
 	});
-
-	// TODO: fix this
-	function handleTabKey(event) {
-		if (event.key === 'Tab') {
-			event.preventDefault();
-			const textarea = event.target;
-			const start = textarea.selectionStart;
-			const end = textarea.selectionEnd;
-
-			// Set textarea value to: text before caret + tab + text after caret
-			textarea.value = textarea.value.substring(0, start) + '\t' + textarea.value.substring(end);
-
-			// Put caret at right position again
-			textarea.selectionStart = textarea.selectionEnd = start + 1;
-
-			// Update the content store
-			content.set(textarea.value);
-		}
-	}
 </script>
 
 <div class="flex h-screen">
-	<div class="w-1/2 p-4" bind:this={parent} on:keydown={handleTabKey}></div>
+	<div class="w-1/2 p-4" bind:this={parent}></div>
 	<div class="markdown w-1/2 p-4 overflow-y-auto" bind:this={markdown}></div>
 </div>
 
@@ -88,22 +54,26 @@
 	}
 
 	:global(.markdown h1) {
-		@apply text-4xl font-bold;
+		@apply text-4xl font-bold mb-4;
 	}
 
 	:global(.markdown h2) {
-		@apply text-3xl font-semibold;
+		@apply text-3xl font-semibold mb-3;
 	}
 
 	:global(.markdown h3) {
-		@apply text-2xl font-medium;
+		@apply text-2xl font-medium mb-2;
+	}
+
+	:global(.markdown p) {
+		@apply mb-2;
 	}
 
 	:global(.markdown ul) {
-		@apply list-disc ml-6;
+		@apply list-disc ml-6 mb-2;
 	}
 
 	:global(.markdown ol) {
-		@apply list-decimal ml-6;
+		@apply list-decimal ml-6 mb-2;
 	}
 </style>
