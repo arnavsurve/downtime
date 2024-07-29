@@ -1,0 +1,112 @@
+<script>
+	import { onMount, onDestroy } from 'svelte';
+	import Markdown from '@magidoc/plugin-svelte-marked';
+	import { v4 as uuidv4 } from 'uuid';
+
+	let socket;
+	let content = '';
+	let version = 0;
+	let clientID = uuidv4();
+
+	function connectWebSocket() {
+		socket = new WebSocket('ws://localhost:8000/ws');
+		socket.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			if (data.clientID !== clientID && data.version > version) {
+				content = data.content;
+				version = data.version;
+			}
+		};
+
+		socket.onclose = () => {
+			console.log('WebSocket disconnected. Attempting to reconnect...');
+			setTimeout(connectWebSocket, 1000);
+		};
+	}
+
+	function sendUpdate() {
+		if (socket.readyState === WebSocket.OPEN) {
+			socket.send(JSON.stringify({ content, version, clientID }));
+		}
+	}
+
+	function handleTabKey(event) {
+		if (event.key === 'Tab') {
+			event.preventDefault();
+			const textarea = event.target;
+			const start = textarea.selectionStart;
+			const end = textarea.selectionEnd;
+
+			// Set textarea value to: text before caret + tab + text after caret
+			textarea.value = textarea.value.substring(0, start) + '\t' + textarea.value.substring(end);
+
+			// Put caret at right position again
+			textarea.selectionStart = textarea.selectionEnd = start + 1;
+
+			// Update the content store
+			content.set(textarea.value);
+		}
+	}
+
+	onMount(() => {
+		connectWebSocket();
+	});
+
+	onDestroy(() => {
+		if (socket) socket.close();
+	});
+
+	$: {
+		if (content) sendUpdate();
+	}
+</script>
+
+<div class="flex h-screen">
+	<div class="w-1/2 p-4">
+		<textarea
+			rows="30"
+			style="resize: none; outline: none;"
+			class="w-full h-full p-2 border rounded resize-none font-mono"
+			bind:value={content}
+			on:input={() => {
+				version++;
+				sendUpdate();
+			}}
+			on:keydown={handleTabKey}
+		></textarea>
+	</div>
+	<div class="markdown w-1/2 p-4 overflow-y-auto">
+		<Markdown source={content} />
+	</div>
+</div>
+
+<style>
+	:global(.markdown) {
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+	}
+
+	:global(.markdown h1) {
+		@apply text-4xl font-bold mb-4;
+	}
+
+	:global(.markdown h2) {
+		@apply text-3xl font-semibold mb-3;
+	}
+
+	:global(.markdown h3) {
+		@apply text-2xl font-medium mb-2;
+	}
+
+	:global(.markdown p) {
+		@apply mb-4;
+	}
+
+	:global(.markdown ul) {
+		@apply list-disc ml-6;
+	}
+
+	:global(.markdown ol) {
+		@apply list-decimal ml-6;
+	}
+</style>
